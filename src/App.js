@@ -103,7 +103,9 @@ export default function App() {
     const data = await readFile(fileList[0]);
     try {
       setAiff(AIFF.parse(new Buffer(data)));
+      setError(null);
     } catch (err) {
+      setAiff(null);
       setError(err);
     }
   }, []);
@@ -116,9 +118,18 @@ export default function App() {
         <input type="file" id="input" onChange={handleFiles} />
       </div>
 
-      {error && <pre>{error.toString() + '\n' + error.stack}</pre>}
+      {error && (
+        <p>
+          Error: this is probably not a valid AIFF file ({error.toString()})
+        </p>
+      )}
       {aiff &&
         aiff.fileChunks.map((chunk, i) => <AiffChunk key={i} chunk={chunk} />)}
+      {!(aiff || error) && (
+        <div>
+          <p>Select an .aif, .aiff, or .aifc file to begin.</p>
+        </div>
+      )}
     </div>
   );
 }
