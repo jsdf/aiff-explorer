@@ -1,8 +1,8 @@
 {
   "files": {
     "main.css": "/aiff-explorer/static/css/main.6f42c021.chunk.css",
-    "main.js": "/aiff-explorer/static/js/main.f79f31eb.chunk.js",
-    "main.js.map": "/aiff-explorer/static/js/main.f79f31eb.chunk.js.map",
+    "main.js": "/aiff-explorer/static/js/main.1dd55e82.chunk.js",
+    "main.js.map": "/aiff-explorer/static/js/main.1dd55e82.chunk.js.map",
     "runtime-main.js": "/aiff-explorer/static/js/runtime-main.65a09c9b.js",
     "runtime-main.js.map": "/aiff-explorer/static/js/runtime-main.65a09c9b.js.map",
     "static/js/2.682e6028.chunk.js": "/aiff-explorer/static/js/2.682e6028.chunk.js",
@@ -15,6 +15,6 @@
     "static/js/runtime-main.65a09c9b.js",
     "static/js/2.682e6028.chunk.js",
     "static/css/main.6f42c021.chunk.css",
-    "static/js/main.f79f31eb.chunk.js"
+    "static/js/main.1dd55e82.chunk.js"
   ]
 }
