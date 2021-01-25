@@ -71,7 +71,7 @@ function AiffChunk({chunk}) {
   const {ckID, ckSize, localChunks} = chunk;
   let chunkSpecificData = chunk.parsed;
   if (ckID === 'FORM') {
-    chunkSpecificData = {formType: chunk.form};
+    chunkSpecificData = {formType: chunk.formType};
   }
 
   // <summary style={{...textStyle, fontWeight: 'bold'}}>{ckID}</summary>
@@ -124,7 +124,7 @@ export default function App() {
 
     const data = await readFile(fileList[0]);
     try {
-      setAiff(AIFF.parse(new Buffer(data)));
+      setAiff(AIFF.parse(new Buffer(data), {includeRawChunks: true}));
       setError(null);
     } catch (err) {
       setAiff(null);

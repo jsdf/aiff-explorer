@@ -185,7 +185,7 @@ const AIFFCommentStruct = new BufferStruct({
   },
 });
 
-const AIFFLoopPlayMode = {
+const LoopPlayMode = {
   NoLooping: 0,
   ForwardLooping: 1,
   ForwardBackwardLooping: 2,
@@ -272,10 +272,11 @@ function serializeAIFF({
   numChannels,
   sampleRate,
   sampleSize,
-  form,
+  formType,
   compressionType,
   compressionName,
-  appl,
+  chunks,
+  rawChunks,
 }) {
   const nsamples = Math.floor(
     soundData.length / numChannels / (sampleSize / 8)
@@ -286,7 +287,7 @@ function serializeAIFF({
   DEBUG && console.log({sampleRate, sampleRate80Bit});
 
   const formatChunk =
-    form === 'AIFC'
+    formType === 'AIFC'
       ? makeAIFFChunk(
           'FVER',
           AIFCFormatStruct.serialize({
@@ -297,7 +298,7 @@ function serializeAIFF({
 
   const commChunk = makeAIFFChunk(
     'COMM',
-    form === 'AIFC'
+    formType === 'AIFC'
       ? AIFCCommonStruct.serialize({
           numChannels,
           numSampleFrames: nsamples,
@@ -316,57 +317,86 @@ function serializeAIFF({
 
   const soundDataChunk = makeAIFFChunk(
     'SSND',
-    Buffer.concat([
-      AIFFSoundDataStruct.serialize(
-        {
-          offset: 0,
-          blockSize: 0,
-          soundData,
-        },
-        {
-          soundDataSize: soundData.length,
-        }
-      ),
-    ])
+    AIFFSoundDataStruct.serialize(
+      {
+        offset: 0,
+        blockSize: 0,
+        soundData,
+      },
+      {soundDataSize: soundData.length}
+    )
   );
 
-  const applChunks =
-    form === 'AIFC' && appl
-      ? appl.map((applObj) =>
-          makeAIFFChunk(
-            'APPL',
-            Buffer.concat([
-              AIFCApplicationSpecificStruct.serialize(applObj, {
-                dataSize: applObj.data.length,
-              }),
-            ])
-          )
-        )
-      : [];
+  const serializedChunks = [];
+  (chunks || []).forEach((parsedChunk) => {
+    const data = parsedChunk.data;
+    let serialized;
+    switch (parsedChunk.type) {
+      case 'SSND':
+      case 'FVER':
+      case 'COMM':
+        return;
+      case 'APPL':
+        serialized = AIFCApplicationSpecificStruct.serialize(data, {
+          dataSize: data.data.length,
+        });
+        break;
+      case 'MARK':
+        serialized = AIFFMarkerChunkStruct.serialize(data);
+        break;
+      case 'COMT':
+        serialized = AIFFCommentStruct.serialize(data);
+        break;
+      case 'INST':
+        serialized = AIFFInstrumentStruct.serialize(data);
+        break;
+      case AIFFNameChunkID:
+      case AIFFAuthorChunkID:
+      case AIFFCopyrightChunkID:
+      case AIFFAnnotationChunkID:
+        serialized = AIFFTextStruct.serialize(data, {
+          dataSize: data.text.length,
+        });
+        break;
+    }
+    if (serialized) {
+      serializedChunks.push(makeAIFFChunk(parsedChunk.type, serialized));
+    }
+  });
 
-  const formType = Buffer.from(form === 'AIFC' ? 'AIFC' : 'AIFF', 'utf8');
+  const formTypeSerialized = Buffer.from(
+    formType === 'AIFC' ? 'AIFC' : 'AIFF',
+    'utf8'
+  );
 
   const aiffFileContents = makeAIFFChunk(
     'FORM',
     Buffer.concat(
-      [formType, formatChunk, commChunk, soundDataChunk, ...applChunks].filter(
-        Boolean
-      )
+      [
+        formTypeSerialized,
+        formatChunk,
+        commChunk,
+        soundDataChunk,
+        ...serializedChunks,
+        ...(rawChunks || []),
+      ].filter(Boolean)
     )
   );
 
   return aiffFileContents;
 }
 
-function parseAIFF(fileContents) {
+function parseAIFF(fileContents, options = {}) {
   let pos = 0;
 
   let output = {};
 
   const fileChunks = [];
+  const parsedFormLocalChunks = [];
+
   while (pos < fileContents.length) {
     DEBUG &&
-      console.error(
+      console.log(
         'parsing file chunk',
         fileContents.slice(pos, pos + 4).toString('utf8'),
         'at',
@@ -388,15 +418,19 @@ function parseAIFF(fileContents) {
   formChunks.forEach((formChunk) => {
     let pos = 0;
     DEBUG && console.log('FORM chunk', formChunk);
-    formChunk.form = formChunk.chunkData.slice(0, 4).toString('utf8');
-    output.form = formChunk.form;
+    const formType = formChunk.chunkData.slice(0, 4).toString('utf8');
+    formChunk.formType = formType;
+
+    if (formType === 'AIFF' || formType === 'AIFC') {
+      output.formType = formType;
+    }
     pos += 4; // skip FORM identifier
-    DEBUG && console.log({formID: formChunk.form});
+    DEBUG && console.log({formType});
 
     const localChunks = [];
     while (pos < formChunk.chunkData.length) {
       DEBUG &&
-        console.error(
+        console.log(
           'parsing FORM local chunk',
           formChunk.chunkData.slice(pos, pos + 4),
           'at',
@@ -416,13 +450,12 @@ function parseAIFF(fileContents) {
       switch (chunk.ckID) {
         case 'COMM':
           chunk.parsed =
-            formChunk.form === 'AIFC'
+            formType === 'AIFC'
               ? AIFCCommonStruct.parse(chunk.chunkData)
               : AIFFCommonStruct.parse(chunk.chunkData);
           chunk.parsed.sampleRate = ieeeExtended.ConvertFromIeeeExtended(
             chunk.parsed.sampleRate
           );
-          chunk.parsed = chunk.parsed;
 
           output.sampleRate = chunk.parsed.sampleRate;
           output.sampleSize = chunk.parsed.sampleSize;
@@ -435,7 +468,6 @@ function parseAIFF(fileContents) {
             soundDataSize:
               chunk.ckSize - AIFF_SOUND_DATA_CHUNK_SIZE_EXCL_SOUNDDATA,
           });
-          chunk.ssnd = chunk.parsed;
           output.soundData = chunk.parsed.soundData;
           break;
         case 'MARK':
@@ -463,31 +495,27 @@ function parseAIFF(fileContents) {
               dataSize: chunk.ckSize - AIFC_APPL_CHUNK_SIZE_EXCL_DATA,
             }
           );
-          chunk.appl = chunk.parsed;
-          output.appl = output.appl || [];
-          output.appl.push(chunk.parsed);
-          break;
-        case 'AIFC':
-          chunk.parsed = AIFCFormatStruct.parse(chunk.chunkData);
-          chunk.format = chunk.parsed;
           break;
         case 'FVER':
           chunk.parsed = AIFCFormatStruct.parse(chunk.chunkData);
-          chunk.fver = chunk.parsed;
           break;
         default:
           DEBUG && console.error('unknown chunk type', chunk.ckID);
       }
 
       DEBUG && console.log('local chunk', chunk);
+      parsedFormLocalChunks.push({type: chunk.ckID, data: chunk.parsed});
 
       localChunks.push(chunk);
       pos = AIFFChunkStruct.lastOffset;
     }
     formChunk.localChunks = localChunks;
   });
-  output.fileChunks = fileChunks;
-  output.formChunks = formChunks;
+
+  if (options.includeRawChunks) {
+    output.fileChunks = fileChunks;
+  }
+  output.chunks = parsedFormLocalChunks;
   return output;
 }
 
@@ -495,5 +523,5 @@ module.exports = {
   serialize: serializeAIFF,
   parse: parseAIFF,
   PString,
-  AIFFLoopPlayMode,
+  LoopPlayMode,
 };
