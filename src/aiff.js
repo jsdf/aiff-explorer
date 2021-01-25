@@ -151,6 +151,24 @@ const AIFFMarkerStruct = new BufferStruct({
 });
 
 // typedef struct {
+//   ID ckID;
+//   long ckSize;
+//   unsigned short numMarkers;
+//   Marker Markers[];
+// } MarkerChunk;
+const AIFFMarkerChunkStruct = new BufferStruct({
+  name: 'AIFFMarkerChunk',
+  endian: 'big',
+  fields: {
+    numMarkers: {type: 'uint', size: 2},
+    markers: {
+      type: AIFFMarkerStruct,
+      arrayElements: (fields) => fields.numMarkers,
+    },
+  },
+});
+
+// typedef struct {
 //   unsigned long timeStamp; /* comment creation date */
 //   MarkerId marker; /* comments for this marker number */
 //   unsigned short count; /* comment text string length */
@@ -421,7 +439,7 @@ function parseAIFF(fileContents) {
           output.soundData = chunk.parsed.soundData;
           break;
         case 'MARK':
-          chunk.parsed = AIFFMarkerStruct.parse(chunk.chunkData, 0);
+          chunk.parsed = AIFFMarkerChunkStruct.parse(chunk.chunkData, 0);
           break;
         case 'COMT':
           chunk.parsed = AIFFCommentStruct.parse(chunk.chunkData, 0);

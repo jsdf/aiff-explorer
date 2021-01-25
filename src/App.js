@@ -1,6 +1,7 @@
 import './styles.css';
 import * as AIFF from './aiff';
 import {useState, useCallback} from 'react';
+import Details from './Details';
 
 function readFile(file) {
   return new Promise((resolve, reject) => {
@@ -22,33 +23,43 @@ const textStyle = {
   margin: '8px 8px',
   wordWrap: 'break-word',
 };
+const textStyleFlushLeft = {
+  margin: '8px 0',
+  wordWrap: 'break-word',
+};
 
 function DisplayObject({object}) {
   return (
     <div style={{...boxStyle, margin: '8px 0px'}}>
       {Object.keys(object).map((key) => {
-        if (object[key] && typeof object[key] === 'object') {
-          if (typeof object[key].length === 'number') {
+        const value = object[key];
+        if (value && typeof value === 'object') {
+          if (Array.isArray(value)) {
             return (
               <div key={key} style={textStyle}>
                 {key}:{' '}
-                {typeof object[key].length === 'number' ? (
-                  `Buffer {size: ${object[key].length}}`
-                ) : (
-                  <DisplayObject object={object[key]} />
-                )}
+                {value.map((v, i) => (
+                  <DisplayObject key={i} object={v} />
+                ))}
+              </div>
+            );
+          }
+          if (typeof value.length === 'number') {
+            return (
+              <div key={key} style={textStyle}>
+                {key}: {`Buffer {size: ${value.length}}`}
               </div>
             );
           }
           return (
             <div key={key} style={textStyle}>
-              {key}: <DisplayObject object={object[key]} />
+              {key}: <DisplayObject object={value} />
             </div>
           );
         }
         return (
           <div key={key} style={textStyle}>
-            {key}: {JSON.stringify(object[key])}
+            {key}: {JSON.stringify(value)}
           </div>
         );
       })}
@@ -63,31 +74,42 @@ function AiffChunk({chunk}) {
     chunkSpecificData = {formType: chunk.form};
   }
 
+  // <summary style={{...textStyle, fontWeight: 'bold'}}>{ckID}</summary>
   return (
     <div style={{...boxStyle, margin: '8px 0px'}}>
-      <div style={textStyle}>chunk ID: {ckID}</div>
-      <div style={textStyle}>chunk size: {ckSize}</div>
-      {chunkSpecificData && (
-        <div style={textStyle}>
-          {ckID} fields:{' '}
-          {typeof chunkSpecificData === 'object' ? (
-            <DisplayObject object={chunkSpecificData} />
-          ) : (
-            JSON.stringify(chunkSpecificData)
-          )}
+      <Details
+        style={textStyle}
+        startOpen
+        summary={ckID}
+        summaryStyle={{
+          width: '100%',
+          cursor: 'pointer',
+          fontWeight: 'bold',
+        }}
+      >
+        <div style={textStyleFlushLeft}>chunk size: {ckSize}</div>
+        {chunkSpecificData && (
+          <div style={textStyleFlushLeft}>
+            {ckID} fields:{' '}
+            {typeof chunkSpecificData === 'object' ? (
+              <DisplayObject object={chunkSpecificData} />
+            ) : (
+              JSON.stringify(chunkSpecificData)
+            )}
+          </div>
+        )}
+        {localChunks && (
+          <div style={textStyleFlushLeft}>
+            local chunks:
+            {localChunks.map((lchunk, i) => (
+              <AiffChunk key={i} chunk={lchunk} />
+            ))}
+          </div>
+        )}
+        <div style={{...textStyleFlushLeft, fontSize: '0.8em', color: '#777'}}>
+          end {ckID} chunk
         </div>
-      )}
-      {localChunks && (
-        <div style={textStyle}>
-          local chunks:
-          {localChunks.map((lchunk, i) => (
-            <AiffChunk key={i} chunk={lchunk} />
-          ))}
-        </div>
-      )}
-      <div style={{...textStyle, fontSize: '0.8em', color: '#777'}}>
-        end {ckID} chunk
-      </div>
+      </Details>
     </div>
   );
 }
@@ -115,7 +137,19 @@ export default function App() {
       <h1>AIFF explorer</h1>
       <div>
         <p>This tool visualizes the chunks in an AIFF file.</p>
-        <input type="file" id="input" onChange={handleFiles} />
+        <input
+          type="file"
+          id="input"
+          onChange={handleFiles}
+          style={{
+            cursor: 'pointer',
+            height: aiff ? null : 300,
+            width: aiff ? null : 600,
+            display: aiff ? null : 'block',
+            border: 'dashed #aaa 1px',
+            padding: 16,
+          }}
+        />
       </div>
 
       {error && (
@@ -127,7 +161,9 @@ export default function App() {
         aiff.fileChunks.map((chunk, i) => <AiffChunk key={i} chunk={chunk} />)}
       {!(aiff || error) && (
         <div>
-          <p>Select an .aif, .aiff, or .aifc file to begin.</p>
+          <p>
+            Select (or drag and drop) an .aif, .aiff, or .aifc file to begin.
+          </p>
         </div>
       )}
     </div>
